@@ -1,13 +1,9 @@
 package com.yhdp.controller;
 
-
 import com.yhdp.dto.Result;
 import com.yhdp.service.IVoucherOrderService;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-
-import org.springframework.web.bind.annotation.RestController;
+import com.yhdp.utils.UserHolder;
+import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 
@@ -27,5 +23,21 @@ public class VoucherOrderController {
     @PostMapping("seckill/{id}")
     public Result seckillVoucher(@PathVariable("id") Long voucherId) {
         return voucherOrderService.seckillVoucher(voucherId);
+    }
+
+    @GetMapping("/{id}")
+    public Result queryByOrderId(@PathVariable("id") Long orderId) {
+        return voucherOrderService.queryByOrderId(orderId);
+    }
+
+    @GetMapping("/user/{userId}")
+    public Result queryByUserId(@PathVariable("userId") Long userId) {
+        return voucherOrderService.queryByUserId(userId);
+    }
+
+    @GetMapping("/my")
+    public Result queryMyOrders() {
+        Long userId = UserHolder.getUser().getId();
+        return voucherOrderService.queryByUserId(userId);
     }
 }

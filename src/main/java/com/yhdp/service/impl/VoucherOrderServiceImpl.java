@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
 /**
  * <p>
  * 服务实现类
@@ -474,4 +475,18 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return Result.ok(orderId);
         }
     }*/
+    @Override
+    public Result queryByOrderId(Long orderId) {
+        VoucherOrder order = getById(orderId);
+        if (order == null) {
+            return Result.fail("订单不存在");
+        }
+        return Result.ok(order);
+    }
+
+    @Override
+    public Result queryByUserId(Long userId) {
+        List<VoucherOrder> orders = query().eq("user_id", userId).list();
+        return Result.ok(orders);
+    }
 }

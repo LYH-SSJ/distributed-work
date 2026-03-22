@@ -1,0 +1,50 @@
+server:
+  port: 8081
+spring:
+  web:
+    resources:
+      static-locations: classpath:/META-INF/resources/,classpath:/resources/,classpath:/static/,classpath:/public/,file:./public/ # 确保包含正确路径
+  mvc:
+    static-path-pattern: /** # 确保模式正确
+  application:
+    name: yhdp
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/yh_dianping?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 835900lyh
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: lyh123
+    lettuce:
+      pool:
+        max-active: 10
+        max-idle: 10
+        min-idle: 1
+        time-between-eviction-runs: 10s
+  jackson:
+    default-property-inclusion: non_null # JSON处理时忽略非空字段
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    virtual-host: /
+    username: lyh
+    password: admin
+    listener:
+      simple:
+        prefetch: 5
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          initial-interval: 1000ms
+          multiplier: 1
+          max-attempts: 3
+          stateless: false
+mybatis-plus:
+  type-aliases-package: com.yhdp.entity # 别名扫描包
+logging:
+  level:
+    com.yhdp: debug
+  pattern:
+    dateformat: mm:ss.SSS

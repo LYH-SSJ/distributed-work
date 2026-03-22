@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  mysql:
+    image: mysql:8.0.32
+    container_name: homework_mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: 835900lyh
+      MYSQL_DATABASE: yh_dianping
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    restart: always
+
+  redis:
+    image: redis:7.0.11
+    container_name: homework_redis
+    ports:
+      - "6379:6379"
+    environment:
+      TZ: Asia/Shanghai
+    command: redis-server --requirepass lyh123
+    volumes:
+      - ./redis/data:/data
+    restart: always

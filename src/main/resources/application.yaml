@@ -9,10 +9,20 @@ spring:
   application:
     name: yhdp
   datasource:
-    driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/yh_dianping?useSSL=false&serverTimezone=UTC
-    username: root
-    password: 835900lyh
+    dynamic:
+      primary: master
+      strict: false
+      datasource:
+        master:
+          driver-class-name: com.mysql.jdbc.Driver
+          url: jdbc:mysql://127.0.0.1:3306/yh_dianping?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          username: root
+          password: 835900lyh
+        slave:
+          driver-class-name: com.mysql.jdbc.Driver
+          url: jdbc:mysql://127.0.0.1:3306/yh_dianping?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          username: root
+          password: 835900lyh
   redis:
     host: 127.0.0.1
     port: 6379

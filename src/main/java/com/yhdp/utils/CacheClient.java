@@ -30,7 +30,10 @@ public class CacheClient {
     }
 
     public void set(String key, Object value, Long time, TimeUnit unit) {
-        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(value), time, unit);
+        // 添加随机TTL偏移量 (0~300秒) 以防止缓存雪崩
+        long randomOffset = cn.hutool.core.util.RandomUtil.randomLong(0, 300);
+        long totalSeconds = unit.toSeconds(time) + randomOffset;
+        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(value), totalSeconds, TimeUnit.SECONDS);
     }
 
     public void setWithLogicalExpire(String key, Object value, Long time, TimeUnit unit) {

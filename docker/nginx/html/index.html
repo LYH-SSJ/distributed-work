@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>分布式作业 - 动静分离与负载均衡测试</title>
+    <style>
+        body { font-family: "Microsoft YaHei", Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f5f5f5; }
+        .box { background: white; border: 1px solid #eee; padding: 20px; margin: 20px auto; width: 400px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>后端动静分离压测与验证页面</h1>
+    <div class="box">
+        <h3>加载静态资源阶段</h3>
+        <p>你看到了带有样式的此页面，说明 <b>Nginx 动静分离静态资源策略</b> 已经生效！你可以对本页面施加 JMeter 压力以测定静态瓶颈。</p>
+    </div>
+    
+    <div class="box">
+        <h3>测试后端代理 (负载均衡)</h3>
+        <p>点击按钮测试经过 Nginx 发往后台的动态请求</p>
+        <button onclick="testApi()">请求后台商店数据</button>
+        <div id="result" style="margin-top:15px;color:green;"></div>
+    </div>
+
+    <script>
+        function testApi() {
+            // 访问 Nginx 配置的 /api/ 代理前缀
+            fetch('/api/shop/of/type?typeId=1&current=1')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('result').innerText = '后端响应成功！(打开控制台可看详情)。使用 JMeter 压测这个接口可以观察后端日志处理请求的情况。';
+                    console.log("后台传回数据:", data);
+                })
+                .catch(err => {
+                    document.getElementById('result').innerText = '请求失败！请确保数据库及后台已正常联通。(' + err + ')';
+                });
+        }
+    </script>
+</body>
+</html>

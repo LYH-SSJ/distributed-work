@@ -1,0 +1,4 @@
+FROM nginx:1.23
+# 将静态网页文件和配置文件彻底拷贝进 Linux 镜像深层硬盘，斩断与 Windows 慢速共享的挂载联系
+COPY ./html /usr/share/nginx/html
+COPY ./conf/nginx.conf /etc/nginx/nginx.conf

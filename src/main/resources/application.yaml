@@ -35,22 +35,16 @@ spring:
         time-between-eviction-runs: 10s
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
-  rabbitmq:
-    host: 127.0.0.1
-    port: 5672
-    virtual-host: /
-    username: lyh
-    password: admin
-    listener:
-      simple:
-        prefetch: 5
-        acknowledge-mode: auto
-        retry:
-          enabled: true
-          initial-interval: 1000ms
-          multiplier: 1
-          max-attempts: 3
-          stateless: false
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: seckill-group
+      auto-offset-reset: earliest
 mybatis-plus:
   type-aliases-package: com.yhdp.entity # 别名扫描包
 logging:

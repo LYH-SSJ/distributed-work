@@ -1,33 +1,26 @@
 package com.yhdp.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yhdp.dto.Result;
 import com.yhdp.entity.VoucherOrder;
 import com.yhdp.mapper.VoucherOrderMapper;
 import com.yhdp.service.ISeckillVoucherService;
 import com.yhdp.service.IVoucherOrderService;
-import com.yhdp.utils.RedisIdWorker;
+import com.yhdp.utils.SnowflakeIdWorker;
 import com.yhdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.data.redis.connection.stream.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
-import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 
 /**
@@ -43,10 +36,10 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private ISeckillVoucherService seckillVoucherService;
     @Resource
-    private RabbitTemplate rabbitTemplate ;
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     @Resource
-    private RedisIdWorker redisIdWorker;
+    private SnowflakeIdWorker snowflakeIdWorker;
     @Resource
     private RedissonClient redissonClient;
     @Resource
@@ -60,198 +53,62 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         SECKILL_SCRIPT.setResultType(Long.class);
     }
 
-
-    private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
-
-
-    @PostConstruct
-    private void init() {
-        SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
-
-    }
-
-    private class VoucherOrderHandler implements Runnable {
-
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    // 1.获取消息队列中的订单信息 XREADGROUP GROUP g1 c1 COUNT 1 BLOCK 2000 STREAMS s1 >
-                    List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
-                            Consumer.from("g1", "c1"),
-                            StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
-                            StreamOffset.create("stream.orders", ReadOffset.lastConsumed())
-                    );
-                    // 2.判断订单信息是否为空
-                    if (list == null || list.isEmpty()) {
-                        // 如果为null，说明没有消息，继续下一次循环
-                        continue;
-                    }
-                    // 解析数据
-                    MapRecord<String, Object, Object> record = list.get(0);
-                    Map<Object, Object> value = record.getValue();
-                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(value, new VoucherOrder(), true);
-                    // 3.创建订单
-                    createVoucherOrder(voucherOrder);
-                    // 4.确认消息 XACK
-                    stringRedisTemplate.opsForStream().acknowledge("s1", "g1", record.getId());
-                } catch (Exception e) {
-                    log.error("处理订单异常", e);
-                    handlePendingList();
-                }
-            }
-        }
-
-        private void handlePendingList() {
-            while (true) {
-                try {
-                    // 1.获取pending-list中的订单信息 XREADGROUP GROUP g1 c1 COUNT 1 BLOCK 2000 STREAMS s1 0
-                    List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
-                            Consumer.from("g1", "c1"),
-                            StreamReadOptions.empty().count(1),
-                            StreamOffset.create("stream.orders", ReadOffset.from("0"))
-                    );
-                    // 2.判断订单信息是否为空
-                    if (list == null || list.isEmpty()) {
-                        // 如果为null，说明没有异常消息，结束循环
-                        break;
-                    }
-                    // 解析数据
-                    MapRecord<String, Object, Object> record = list.get(0);
-                    Map<Object, Object> value = record.getValue();
-                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(value, new VoucherOrder(), true);
-                    // 3.创建订单
-                    createVoucherOrder(voucherOrder);
-                    // 4.确认消息 XACK
-                    stringRedisTemplate.opsForStream().acknowledge("s1", "g1", record.getId());
-                } catch (Exception e) {
-                    log.error("处理订单异常", e);
-                }
-            }
-        }
-    }
-
-    /*private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024 * 1024);
-    private class VoucherOrderHandler implements Runnable{
-
-        @Override
-        public void run() {
-            while (true){
-                try {
-                    // 1.获取队列中的订单信息
-                    VoucherOrder voucherOrder = orderTasks.take();
-                    // 2.创建订单
-                    createVoucherOrder(voucherOrder);
-                } catch (Exception e) {
-                    log.error("处理订单异常", e);
-                }
-            }
-        }
-    }*/
-
-    private void createVoucherOrder(VoucherOrder voucherOrder) {
-        Long userId = voucherOrder.getUserId();
-        Long voucherId = voucherOrder.getVoucherId();
-        // 创建锁对象
-        RLock redisLock = redissonClient.getLock("lock:order:" + userId);
-        // 尝试获取锁
-        boolean isLock = redisLock.tryLock();
-        // 判断
-        if (!isLock) {
-            // 获取锁失败，直接返回失败或者重试
-            log.error("不允许重复下单！");
-            return;
-        }
-
-        try {
-            // 5.1.查询订单
-            int count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
-            // 5.2.判断是否存在
-            if (count > 0) {
-                // 用户已经购买过了
-                log.error("不允许重复下单！");
-                return;
-            }
-
-            // 6.扣减库存
-            boolean success = seckillVoucherService.update()
-                    .setSql("stock = stock - 1") // set stock = stock - 1
-                    .eq("voucher_id", voucherId).gt("stock", 0) // where id = ? and stock > 0
-                    .update();
-            if (!success) {
-                // 扣减失败
-                log.error("库存不足！");
-                return;
-            }
-
-            // 7.创建订单
-            save(voucherOrder);
-        } finally {
-            // 释放锁
-            redisLock.unlock();
-        }
-    }
-
     @Override
     public Result seckillVoucher(Long voucherId) {
-        //1. 执行lua脚本
         Long userId = UserHolder.getUser().getId();
-        Long res = (Long) stringRedisTemplate.execute(
+        // 1.执行lua脚本
+        // 传递三个参数: voucherId, userId, orderId (虽然Lua里现在不一定会直接用到orderId, 但我们遵循接口约定)
+        long orderId = snowflakeIdWorker.nextId();
+        Long result = stringRedisTemplate.execute(
                 SECKILL_SCRIPT,
                 Collections.emptyList(),
-                voucherId.toString(),
-                userId.toString()
+                voucherId.toString(), userId.toString(), String.valueOf(orderId)
         );
+        int r = result.intValue();
         // 2.判断结果是否为0
-        if (res != 0) {
+        if (r != 0) {
             // 2.1.不为0 ，代表没有购买资格
-            return Result.fail(res == 1 ? "库存不足" : "不能重复下单");
+            return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
         }
 
-        //3.2 是 说明用户拥有购买资格将优惠券id，用户id和订单id存入阻塞队列，开启异步下单
-        long orderId = redisIdWorker.nextId("order");
-        // 创建优惠券订单并写入阻塞队列
+        // 3.有购买资格，把下单信息保存到Kafka
         VoucherOrder voucherOrder = new VoucherOrder();
-        voucherOrder.setUserId(UserHolder.getUser().getId());
-        voucherOrder.setVoucherId(voucherId);
         voucherOrder.setId(orderId);
-        //写入阻塞队列
-//        orderTasks.add(voucherOrder);
-        //存入消息队列等待异步消费
-        rabbitTemplate.convertAndSend("seckill.direct","seckill.order",voucherOrder);// 这里会自动开启消息持久化机制
-        //4. 返回账单id
+        voucherOrder.setUserId(userId);
+        voucherOrder.setVoucherId(voucherId);
+        
+        // 发送消息到Kafka
+        kafkaTemplate.send("seckill.orders", JSONUtil.toJsonStr(voucherOrder));
+
+        // 4.返回订单id
         return Result.ok(orderId);
     }
 
+    @Override
     @Transactional
-    public void handleVoucherOrder(VoucherOrder order) {
-        // 这里 1 不在需要分布式锁了 因为前面的lua脚本 已经保证了 只有一个用户线程可以进入创建订单的业务
-        // 为什么呢？  因为 判断有没有订单和添加订单是原子操作  添加到hash表里面了 ，而且redis本身就是单线程的应用
-        // 所以同一时刻 只有一个用户线程可以创建订单，而这个用户线程一旦创建了订单，其他用户线程再也无法创建了
-        // 其次因为这里开启了一个子线程，所以 里面已经没有了userid 和orderId 了
-        Long userId = order.getUserId();
-        Long voucherId = order.getVoucherId();
-        // 这里一定是0
+    public void createVoucherOrder(VoucherOrder voucherOrder) {
+        Long userId = voucherOrder.getUserId();
+        Long voucherId = voucherOrder.getVoucherId();
+
+        // 1.一人一单 (二次校验, 防止恶意绕过或极端异常)
         int count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
-        // 2.2.判断是否存在
         if (count > 0) {
-            // 用户已经购买了 其实这里也走不到 一定不会的
             log.error("用户已经购买过了");
             return;
         }
-        // 3.用户购买，需要扣减库存写入Sql
+
+        // 2.扣减库存
         boolean success = seckillVoucherService.update()
-                .setSql("stock= stock -1") // set stock = stock -1
-                .eq("voucher_id", voucherId).gt("stock", 0).update(); //where id = ? and stock > 0
+                .setSql("stock = stock - 1")
+                .eq("voucher_id", voucherId).gt("stock", 0)
+                .update();
         if (!success) {
-            //扣减库存 理论不会出现
             log.error("库存不足");
-            return ;
+            return;
         }
-        // 保存订单
-        save(order);
-        //throw new RuntimeException("模拟异常,故意的");
-//        return;
+
+        // 3.创建订单
+        save(voucherOrder);
     }
 
     /*@Override

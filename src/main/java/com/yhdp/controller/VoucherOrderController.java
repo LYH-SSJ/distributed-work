@@ -40,4 +40,9 @@ public class VoucherOrderController {
         Long userId = UserHolder.getUser().getId();
         return voucherOrderService.queryByUserId(userId);
     }
+
+    @PostMapping("/pay/{id}")
+    public Result payOrder(@PathVariable("id") Long orderId) {
+        return voucherOrderService.payOrder(orderId);
+    }
 }

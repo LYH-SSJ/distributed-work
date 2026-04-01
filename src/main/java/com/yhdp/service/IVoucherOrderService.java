@@ -19,4 +19,5 @@ public interface IVoucherOrderService extends IService<VoucherOrder> {
     Result queryByOrderId(Long orderId);
 
     Result queryByUserId(Long userId);
+    Result payOrder(Long orderId);
 }

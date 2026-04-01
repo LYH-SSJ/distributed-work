@@ -15,4 +15,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class SeckillVoucherServiceImpl extends ServiceImpl<SeckillVoucherMapper, SeckillVoucher> implements ISeckillVoucherService {
 
+    @Override
+    public boolean deductStock(Long voucherId) {
+        return update()
+                .setSql("stock = stock - 1")
+                .eq("voucher_id", voucherId)
+                .gt("stock", 0)
+                .update();
+    }
 }
